@@ -931,6 +931,21 @@ function syncFromCloud(state){
   APP.sync.applying=false;
 }
 
+function completeInitialCloudSync(remoteState,allowInitializeEmpty=true){
+  APP.sync.hydrated=true;
+  if(remoteState){
+    if(!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
+    else{renderStrip();renderDay();}
+    return;
+  }
+  if(allowInitializeEmpty){
+    if(APP.sync.needsSave)queueCloudSave();
+    else pushCloudState();
+  }
+  renderStrip();
+  renderDay();
+}
+
 function resetAccountState(theme=SL.theme){
   APP.state=defaultState(theme);
   renderStrip();
@@ -948,23 +963,32 @@ function startCloudSync(user){
     const remoteState=payload&&payload.state?sanitizeState(payload.state):null;
     if(APP.sync.firstSnapshot){
       APP.sync.firstSnapshot=false;
-      if(remoteState){
-        APP.sync.hydrated=true;
-        if(!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
-        else{renderStrip();renderDay();}
-      } else {
-        APP.sync.hydrated=true;
-        if(APP.sync.needsSave)queueCloudSave();
-        else pushCloudState();
-        renderStrip();
-        renderDay();
-      }
+      completeInitialCloudSync(remoteState,true);
       return;
     }
     if(remoteState&&!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
   },err=>{
-    APP.sync.ready=false;
+    if(APP.sync.firstSnapshot){
+      APP.sync.firstSnapshot=false;
+      completeInitialCloudSync(null,false);
+    }
+    APP.sync.hydrated=true;
+    renderStrip();
+    renderDay();
     console.error('Firebase sync failed.',err);
+  });
+
+  getDocFromServer(APP.sync.docRef).then(snap=>{
+    if(!APP.sync.ready||APP.sync.activeUid!==user.uid||!APP.sync.firstSnapshot)return;
+    APP.sync.firstSnapshot=false;
+    const payload=snap.exists()?snap.data():null;
+    const remoteState=payload&&payload.state?sanitizeState(payload.state):null;
+    completeInitialCloudSync(remoteState,true);
+  }).catch(err=>{
+    if(!APP.sync.ready||APP.sync.activeUid!==user.uid||!APP.sync.firstSnapshot)return;
+    APP.sync.firstSnapshot=false;
+    completeInitialCloudSync(null,false);
+    console.error('Initial cloud load failed.',err);
   });
 }
 
