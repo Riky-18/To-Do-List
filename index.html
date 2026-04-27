@@ -421,7 +421,7 @@ function clearLegacyLocalState(){
 
 const APP={
   state:defaultState(),
-  sync:{ready:false,hydrated:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null,needsSave:false,initialLoadTimer:null},
+  sync:{ready:false,hydrated:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null,needsSave:false},
   auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,lastButtonTriggerAt:0,busy:false,ready:false},
   refresh:{loading:false,tracking:false,startY:0,distance:0,armed:false}
 };
@@ -468,7 +468,6 @@ function saveState(remote=true,immediate=false){
 
 function stopCloudSync(){
   clearTimeout(APP.sync.timer);
-  clearTimeout(APP.sync.initialLoadTimer);
   if(APP.sync.unsubscribe)APP.sync.unsubscribe();
   APP.sync.unsubscribe=null;
   APP.sync.ready=false;
@@ -478,7 +477,6 @@ function stopCloudSync(){
   APP.sync.activeUid='';
   APP.sync.pushPromise=null;
   APP.sync.needsSave=false;
-  APP.sync.initialLoadTimer=null;
 }
 
 function profileLabel(user){
@@ -934,8 +932,6 @@ function syncFromCloud(state){
 }
 
 function completeInitialCloudSync(remoteState,allowInitializeEmpty=true){
-  clearTimeout(APP.sync.initialLoadTimer);
-  APP.sync.initialLoadTimer=null;
   APP.sync.hydrated=true;
   if(remoteState){
     if(!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
@@ -962,12 +958,6 @@ function startCloudSync(user){
   APP.sync.ready=true;
   APP.sync.hydrated=false;
   APP.sync.activeUid=user.uid;
-  APP.sync.initialLoadTimer=setTimeout(()=>{
-    if(!APP.sync.ready||APP.sync.activeUid!==user.uid||!APP.sync.firstSnapshot)return;
-    APP.sync.firstSnapshot=false;
-    completeInitialCloudSync(null,false);
-    toast('Cloud load is taking longer than expected. You can keep using the app and pull to refresh.');
-  },4000);
   APP.sync.unsubscribe=onSnapshot(APP.sync.docRef,snap=>{
     const payload=snap.exists()?snap.data():null;
     const remoteState=payload&&payload.state?sanitizeState(payload.state):null;
