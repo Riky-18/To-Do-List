@@ -346,7 +346,7 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-analytics.js";
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { browserLocalPersistence, getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { getFirestore, doc, getDocFromServer, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -422,7 +422,7 @@ function clearLegacyLocalState(){
 const APP={
   state:defaultState(),
   sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null},
-  auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,busy:false},
+  auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,busy:false,ready:false},
   refresh:{loading:false,tracking:false,startY:0,distance:0,armed:false}
 };
 
@@ -493,15 +493,26 @@ function setAccountBusy(busy){
   if(btn)btn.disabled=busy;
 }
 
+function useRedirectAuthFlow(){
+  return window.matchMedia('(pointer: coarse)').matches
+    || window.matchMedia('(display-mode: standalone)').matches
+    || navigator.standalone===true;
+}
+
 function renderAccountButton(user){
   const btn=document.getElementById('btnAccount');
   const img=document.getElementById('uimg');
   const txt=document.getElementById('uinitial');
   const signed=isSignedIntoAccount(user);
-  const name=signed?(user.displayName||user.email||'Google account'):'Google sign in';
+  const waiting=!APP.auth.ready&&!signed;
+  const name=signed?(user.displayName||user.email||'Google account'):(waiting?'Checking account':'Google sign in');
   btn.classList.toggle('signed',signed);
-  btn.title=signed?`Signed in as ${name}. Triple tap to sign out.`:'Sign in with Google to sync your tasks';
-  txt.textContent=profileLabel(user);
+  const label=signed
+    ?`Signed in as ${name}. Triple tap to sign out.`
+    :(waiting?'Checking Google sign-in...':'Sign in with Google to sync your tasks');
+  btn.title=label;
+  btn.setAttribute('aria-label',label);
+  txt.textContent=waiting?'...':profileLabel(user);
   if(signed&&user.photoURL){
     img.src=user.photoURL;
     img.hidden=false;
@@ -512,6 +523,21 @@ function renderAccountButton(user){
     txt.style.display='flex';
   }
   btn.disabled=APP.auth.busy;
+}
+
+async function initAuthSession(){
+  setAccountBusy(true);
+  try{
+    await setPersistence(auth,browserLocalPersistence);
+    const redirectResult=await getRedirectResult(auth);
+    if(redirectResult?.user)toast('Tasks now sync with your Google account.');
+  }catch(err){
+    console.error('Auth initialization failed.',err);
+  }finally{
+    APP.auth.ready=true;
+    setAccountBusy(false);
+    renderAccountButton(APP.auth.user);
+  }
 }
 
 async function registerServiceWorker(){
@@ -918,6 +944,10 @@ async function signInWithGoogleAccount(){
   if(APP.auth.busy)return;
   setAccountBusy(true);
   try{
+    if(useRedirectAuthFlow()){
+      await signInWithRedirect(auth,googleProvider);
+      return;
+    }
     await signInWithPopup(auth,googleProvider);
     toast('Tasks now sync with your Google account.');
   }catch(err){
@@ -925,6 +955,10 @@ async function signInWithGoogleAccount(){
     if(err.code==='auth/cancelled-popup-request')return;
     if(err.code==='auth/credential-already-in-use'){
       try{
+        if(useRedirectAuthFlow()){
+          await signInWithRedirect(auth,googleProvider);
+          return;
+        }
         await signInWithPopup(auth,googleProvider);
         toast('Tasks now sync with your Google account.');
         return;
@@ -943,6 +977,7 @@ async function signInWithGoogleAccount(){
 function bindAuth(){
   onAuthStateChanged(auth,user=>{
     APP.auth.user=user;
+    APP.auth.ready=true;
     setAccountBusy(false);
     clearLogoutTapState();
     renderAccountButton(user);
@@ -1071,11 +1106,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   renderStrip();
   renderDay();
   renderQuote(false);
-  renderAccountButton(null);
+  renderAccountButton(auth.currentUser);
   requestAnimationFrame(()=>document.body.classList.add('ready'));
   bindPullToRefresh();
   bindLifecycleSync();
   bindAuth();
+  initAuthSession();
 
   document.getElementById('btnTheme').addEventListener('click',()=>{
     SL.theme=SL.theme==='dark'?'light':'dark';applyTh(SL.theme);
