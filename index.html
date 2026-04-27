@@ -421,23 +421,25 @@ function clearLegacyLocalState(){
 
 const APP={
   state:defaultState(),
-  sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null},
+  sync:{ready:false,hydrated:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null,needsSave:false},
   auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,lastButtonTriggerAt:0,busy:false,ready:false},
   refresh:{loading:false,tracking:false,startY:0,distance:0,armed:false}
 };
 
 function queueCloudSave(){
-  if(!APP.sync.ready||APP.sync.applying||!APP.sync.docRef)return;
+  APP.sync.needsSave=true;
+  if(!APP.sync.ready||!APP.sync.hydrated||APP.sync.applying||!APP.sync.docRef)return;
   clearTimeout(APP.sync.timer);
   APP.sync.timer=setTimeout(pushCloudState,250);
 }
 
 async function pushCloudState(){
-  if(!APP.sync.ready||APP.sync.applying||!APP.sync.docRef)return;
+  if(!APP.sync.ready||!APP.sync.hydrated||APP.sync.applying||!APP.sync.docRef)return;
   if(APP.sync.pushPromise)return APP.sync.pushPromise;
   APP.sync.pushPromise=(async()=>{
     try{
       await setDoc(APP.sync.docRef,{state:APP.state,updatedAt:serverTimestamp()},{merge:true});
+      APP.sync.needsSave=false;
     }catch(err){
       console.error('Firebase save failed.',err);
     }finally{
@@ -469,10 +471,12 @@ function stopCloudSync(){
   if(APP.sync.unsubscribe)APP.sync.unsubscribe();
   APP.sync.unsubscribe=null;
   APP.sync.ready=false;
+  APP.sync.hydrated=false;
   APP.sync.docRef=null;
   APP.sync.firstSnapshot=true;
   APP.sync.activeUid='';
   APP.sync.pushPromise=null;
+  APP.sync.needsSave=false;
 }
 
 function profileLabel(user){
@@ -648,7 +652,8 @@ function renderDay(){
   const future=isFuture(ds);
   const past=isPast(ds);
   const signedIn=isSignedIntoAccount(APP.auth.user);
-  const editable=signedIn&&!future;
+  const cloudReady=!signedIn||APP.sync.hydrated;
+  const editable=signedIn&&cloudReady&&!future;
   const d=parseD(ds);
 
   document.getElementById('dtitle').textContent=`${DN[d.getDay()]}, ${MO[d.getMonth()]} ${d.getDate()}`;
@@ -660,6 +665,8 @@ function renderDay(){
   const addArea=document.getElementById('addArea');
   if(!signedIn){
     addArea.innerHTML=`<div class="locked"><div class="locked-ico">☁</div>Sign in with Google to load your account tasks.<br>Your list will sync across all devices on the same account.</div>`;
+  } else if(!cloudReady){
+    addArea.innerHTML=`<div class="locked"><div class="locked-ico">...</div>Loading your account tasks...<br>Please wait a moment before editing.</div>`;
   } else if(future){
     addArea.innerHTML=`<div class="locked"><div class="locked-ico">🔒</div>Future dates are read-only.<br>Add tasks to today or past days only.</div>`;
   } else {
@@ -693,6 +700,8 @@ function renderDay(){
   if(!tasks.length){
     if(!signedIn){
       list.innerHTML=`<div class="empty"><div class="empty-ico">Cloud</div><div class="empty-txt">Sign in to view and manage your cloud-synced tasks.</div></div>`;
+    } else if(!cloudReady){
+      list.innerHTML=`<div class="empty"><div class="empty-ico">...</div><div class="empty-txt">Loading tasks from your Google account...</div></div>`;
     } else
     list.innerHTML=`<div class="empty"><div class="empty-ico">${future?'🔮':past?'📜':'🌱'}</div><div class="empty-txt">${future?'No tasks planned.<br>Come back to today to add tasks.':past?'No tasks were recorded for this day.':'No tasks yet.<br>Plant your first intention above!'}</div></div>`;
   } else {
@@ -732,6 +741,7 @@ function renderDay(){
 
 function addTask(){
   if(!isSignedIntoAccount(APP.auth.user)){toast('Sign in with Google to save tasks to your account.');return;}
+  if(!APP.sync.hydrated){toast('Account data is still loading. Please wait a moment.');return;}
   const inp=document.getElementById('tinput');
   const text=inp.value.trim();
   if(!text)return;
@@ -753,6 +763,7 @@ function addTask(){
 
 function toggleTask(ds,id,li,fb){
   if(!isSignedIntoAccount(APP.auth.user)){toast('Sign in with Google to update tasks.');return;}
+  if(!APP.sync.hydrated){toast('Account data is still loading. Please wait a moment.');return;}
   const tasks=tf(ds);const task=tasks.find(t=>t.id===id);
   if(!task)return;
   task.done=!task.done;stf(ds,tasks);
@@ -766,6 +777,7 @@ function toggleTask(ds,id,li,fb){
 
 function delTask(ds,id,li){
   if(!isSignedIntoAccount(APP.auth.user)){toast('Sign in with Google to delete tasks.');return;}
+  if(!APP.sync.hydrated){toast('Account data is still loading. Please wait a moment.');return;}
   li.style.transition='all .22s';li.style.opacity='0';li.style.transform='translateX(16px) scale(.95)';
   setTimeout(()=>{stf(ds,tf(ds).filter(t=>t.id!==id));renderStrip();renderDay();},200);
 }
@@ -929,6 +941,7 @@ function startCloudSync(user){
   stopCloudSync();
   APP.sync.docRef=doc(db,CLOUD_COLLECTION,user.uid);
   APP.sync.ready=true;
+  APP.sync.hydrated=false;
   APP.sync.activeUid=user.uid;
   APP.sync.unsubscribe=onSnapshot(APP.sync.docRef,snap=>{
     const payload=snap.exists()?snap.data():null;
@@ -936,9 +949,15 @@ function startCloudSync(user){
     if(APP.sync.firstSnapshot){
       APP.sync.firstSnapshot=false;
       if(remoteState){
+        APP.sync.hydrated=true;
         if(!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
+        else{renderStrip();renderDay();}
       } else {
-        queueCloudSave();
+        APP.sync.hydrated=true;
+        if(APP.sync.needsSave)queueCloudSave();
+        else pushCloudState();
+        renderStrip();
+        renderDay();
       }
       return;
     }
@@ -1039,7 +1058,7 @@ function bindAccountButton(){
   const triggerAccountAction=event=>{
     if(APP.auth.busy)return;
     const now=Date.now();
-    if(now-APP.auth.lastButtonTriggerAt<220)return;
+    if(now-APP.auth.lastButtonTriggerAt<60)return;
     APP.auth.lastButtonTriggerAt=now;
     if(event){
       if(typeof event.preventDefault==='function')event.preventDefault();
@@ -1053,8 +1072,13 @@ function bindAccountButton(){
     triggerAccountAction(event);
   });
 
+  btn.addEventListener('touchend',event=>{
+    if(window.PointerEvent)return;
+    triggerAccountAction(event);
+  },{passive:false});
+
   btn.addEventListener('click',event=>{
-    if(event.detail!==0)return;
+    if(event.detail!==0&&window.PointerEvent)return;
     triggerAccountAction(event);
   });
 }
