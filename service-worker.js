@@ -1,14 +1,15 @@
-const CACHE_NAME = "bloom-shell-v3";
+const CACHE_NAME = "bloom-shell-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest",
+  "./manifest.webmanifest?v=20260427",
+  "./assets/logo-title.png?v=20260427",
   "./icons/logo-mark.png",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/apple-touch-icon.png",
-  "./icons/favicon-32.png",
-  "./icons/favicon-16.png"
+  "./icons/icon-192.png?v=20260427",
+  "./icons/icon-512.png?v=20260427",
+  "./icons/apple-touch-icon.png?v=20260427",
+  "./icons/favicon-32.png?v=20260427",
+  "./icons/favicon-16.png?v=20260427"
 ];
 
 self.addEventListener("install", event => {

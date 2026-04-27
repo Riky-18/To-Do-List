@@ -8,10 +8,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Bloom">
-<link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
-<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest?v=20260427">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=20260427">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=20260427">
+<link rel="shortcut icon" href="./icons/favicon-32.png?v=20260427">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20260427">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -59,8 +60,8 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 /* topbar */
 .topbar{flex:0 0 auto;padding:14px 18px 10px;display:flex;align-items:center;justify-content:space-between;background:var(--card);border-bottom:1px solid var(--border);position:relative;z-index:10;box-shadow:var(--sh);}
 .tl{display:flex;align-items:center;gap:10px;}
-.app-icon{width:36px;height:36px;border-radius:50%;background:var(--card) url('./icons/logo-mark.png') center/cover no-repeat;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(74,124,89,.28);animation:iconFloat 4.8s ease-in-out infinite;overflow:hidden;border:1px solid rgba(255,255,255,.55);font-size:0;color:transparent;}
-.app-icon img{width:100%;height:100%;object-fit:cover;display:block;}
+.app-icon{width:50px;height:50px;display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:iconFloat 4.8s ease-in-out infinite;font-size:0;color:transparent;}
+.app-icon img{width:100%;height:100%;object-fit:contain;display:block;filter:drop-shadow(0 4px 10px rgba(74,124,89,.2));}
 .app-name{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);letter-spacing:-.4px;line-height:1;}
 .app-sub{font-size:10px;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;}
 .tr{display:flex;gap:8px;}
@@ -275,7 +276,7 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 
 <div class="topbar">
   <div class="tl">
-    <div class="app-icon">🌿</div>
+    <div class="app-icon"><img src="./assets/logo-title.png?v=20260427" alt="Bloom logo"></div>
     <div><div class="app-name">Bloom</div><div class="app-sub">Daily garden</div></div>
   </div>
   <div class="tr">
@@ -542,6 +543,20 @@ function addRecurMo(text,y,m){
   ss(s);
 }
 
+function addRecurWeekday(text,y,m,weekday){
+  const s=gs();
+  const days=new Date(y,m+1,0).getDate();
+  for(let d=1;d<=days;d++){
+    const date=new Date(y,m,d);
+    if(date.getDay()!==weekday)continue;
+    const ds=toDs(y,m,d);
+    if(!s[ds])s[ds]=[];
+    if(!s[ds].find(t=>t.text===text))
+      s[ds].push({id:Date.now()+d+weekday*100,text,done:false,rec:true});
+  }
+  ss(s);
+}
+
 const now=new Date();
 let SL={
   sel:tdStr(),
@@ -621,6 +636,13 @@ function renderDay(){
           <select class="rsel" id="rsel">
             <option value="none">This day only</option>
             <option value="month">All of this month</option>
+            <option value="dow-0">All Sundays</option>
+            <option value="dow-1">All Mondays</option>
+            <option value="dow-2">All Tuesdays</option>
+            <option value="dow-3">All Wednesdays</option>
+            <option value="dow-4">All Thursdays</option>
+            <option value="dow-5">All Fridays</option>
+            <option value="dow-6">All Saturdays</option>
           </select>
         </div>
       </div>`;
@@ -673,9 +695,14 @@ function addTask(){
   if(!text)return;
   const rec=document.getElementById('rsel').value;
   const ds=SL.sel;
+  const d=parseD(ds);
   if(rec==='month'){
-    const d=parseD(ds);addRecurMo(text,d.getFullYear(),d.getMonth());
-    toast('🌿 Added to all days this month!');
+    addRecurMo(text,d.getFullYear(),d.getMonth());
+    toast('Task added to all days this month.');
+  } else if(rec.startsWith('dow-')){
+    const weekday=Number(rec.split('-')[1]);
+    addRecurWeekday(text,d.getFullYear(),d.getMonth(),weekday);
+    toast(`${DN[weekday]} tasks added across this month.`);
   } else {
     const tasks=tf(ds);tasks.push({id:Date.now(),text,done:false,rec:false});stf(ds,tasks);
   }
@@ -905,3 +932,5 @@ document.addEventListener('DOMContentLoaded',()=>{
 </script>
 </body>
 </html>
+
+
