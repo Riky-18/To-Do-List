@@ -8,11 +8,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Bloom">
-<link rel="manifest" href="./manifest.webmanifest?v=20260427">
-<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=20260427">
-<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=20260427">
-<link rel="shortcut icon" href="./icons/favicon-32.png?v=20260427">
-<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20260427">
+<link rel="manifest" href="./manifest.webmanifest?v=20260427-round">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=20260427-round">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png?v=20260427-round">
+<link rel="shortcut icon" href="./icons/favicon-32.png?v=20260427-round">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png?v=20260427-round">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -60,8 +60,8 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 /* topbar */
 .topbar{flex:0 0 auto;padding:14px 18px 10px;display:flex;align-items:center;justify-content:space-between;background:var(--card);border-bottom:1px solid var(--border);position:relative;z-index:10;box-shadow:var(--sh);}
 .tl{display:flex;align-items:center;gap:10px;}
-.app-icon{width:50px;height:50px;display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:iconFloat 4.8s ease-in-out infinite;font-size:0;color:transparent;}
-.app-icon img{width:100%;height:100%;object-fit:contain;display:block;filter:drop-shadow(0 4px 10px rgba(74,124,89,.2));}
+.app-icon{width:50px;height:50px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:iconFloat 4.8s ease-in-out infinite;font-size:0;color:transparent;box-shadow:0 4px 14px rgba(74,124,89,.18);}
+.app-icon img{width:100%;height:100%;object-fit:cover;display:block;}
 .app-name{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);letter-spacing:-.4px;line-height:1;}
 .app-sub{font-size:10px;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;}
 .tr{display:flex;gap:8px;}
@@ -276,7 +276,7 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 
 <div class="topbar">
   <div class="tl">
-    <div class="app-icon"><img src="./assets/logo-title.png?v=20260427" alt="Bloom logo"></div>
+    <div class="app-icon"><img src="./assets/logo-title.png?v=20260427-round" alt="Bloom logo"></div>
     <div><div class="app-name">Bloom</div><div class="app-sub">Daily garden</div></div>
   </div>
   <div class="tr">
