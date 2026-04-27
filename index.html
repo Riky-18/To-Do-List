@@ -55,8 +55,17 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 .app-name{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);letter-spacing:-.4px;line-height:1;}
 .app-sub{font-size:10px;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;}
 .tr{display:flex;gap:8px;}
+.tr #btnBouquet{order:1;}
+.tr #btnTheme{order:2;}
+.tr .userbtn{order:3;}
 .tbb{width:36px;height:36px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .2s;color:var(--text);}
 .tbb:active{transform:scale(.9);background:var(--bg3);}
+.userbtn{position:relative;overflow:hidden;padding:0;}
+.userbtn::after{content:'';position:absolute;right:3px;bottom:3px;width:7px;height:7px;border-radius:50%;background:var(--text3);border:1.5px solid var(--card);opacity:.75;transition:all .2s;}
+.userbtn.signed::after{background:var(--accent2);opacity:1;}
+.uimg{width:100%;height:100%;object-fit:cover;display:block;}
+.uinitial{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:13px;font-weight:700;letter-spacing:.2px;color:var(--text2);background:linear-gradient(135deg,rgba(255,255,255,.3),rgba(106,171,126,.2));}
+.userbtn.signed .uinitial{display:none;}
 @keyframes iconFloat{
   0%,100%{transform:translateY(0);box-shadow:0 2px 8px rgba(74,124,89,.28);}
   50%{transform:translateY(-2px);box-shadow:0 6px 16px rgba(74,124,89,.22);}
@@ -261,6 +270,10 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
     <div><div class="app-name">Bloom</div><div class="app-sub">Daily garden</div></div>
   </div>
   <div class="tr">
+    <button class="tbb userbtn" id="btnAccount" title="Sign in with Google">
+      <img class="uimg" id="uimg" alt="" hidden>
+      <span class="uinitial" id="uinitial">G</span>
+    </button>
     <button class="tbb" id="btnBouquet">💐</button>
     <button class="tbb" id="btnTheme">🌙</button>
   </div>
@@ -311,7 +324,7 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-analytics.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, linkWithPopup, onAuthStateChanged, signInAnonymously, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -327,6 +340,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({prompt:'select_account'});
 analyticsSupported().then(supported=>{if(supported)getAnalytics(app);}).catch(()=>{});
 
 const STATE_KEY='blm3-state';
@@ -401,7 +416,8 @@ function loadState(){
 
 const APP={
   state:loadState(),
-  sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null}
+  sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:''},
+  auth:{user:null}
 };
 
 function persistLocalState(){
@@ -430,6 +446,51 @@ async function pushCloudState(){
 function saveState(remote=true){
   persistLocalState();
   if(remote)queueCloudSave();
+}
+
+function stopCloudSync(){
+  clearTimeout(APP.sync.timer);
+  if(APP.sync.unsubscribe)APP.sync.unsubscribe();
+  APP.sync.unsubscribe=null;
+  APP.sync.ready=false;
+  APP.sync.docRef=null;
+  APP.sync.firstSnapshot=true;
+  APP.sync.activeUid='';
+}
+
+function profileLabel(user){
+  if(!user)return'G';
+  const source=(user.displayName||user.email||'G').trim();
+  return source.charAt(0).toUpperCase()||'G';
+}
+
+function renderAccountButton(user){
+  const btn=document.getElementById('btnAccount');
+  const img=document.getElementById('uimg');
+  const txt=document.getElementById('uinitial');
+  const signed=!!user&&!user.isAnonymous;
+  const name=signed?(user.displayName||user.email||'Google account'):'Google sign in';
+  btn.classList.toggle('signed',signed);
+  btn.title=signed?`Signed in as ${name}. Click to sign out.`:'Sign in with Google';
+  txt.textContent=profileLabel(user);
+  if(signed&&user.photoURL){
+    img.src=user.photoURL;
+    img.hidden=false;
+    txt.style.display='none';
+  } else {
+    img.hidden=true;
+    img.removeAttribute('src');
+    txt.style.display='flex';
+  }
+}
+
+async function ensureAnonymousSession(){
+  if(auth.currentUser)return;
+  try{
+    await signInAnonymously(auth);
+  }catch(err){
+    console.error('Anonymous sign-in failed.',err);
+  }
 }
 
 function gs(){return APP.state.days}
@@ -684,31 +745,64 @@ function syncFromCloud(state){
   APP.sync.applying=false;
 }
 
-async function initFirebaseSync(){
+function startCloudSync(user){
+  stopCloudSync();
+  APP.sync.docRef=doc(db,CLOUD_COLLECTION,user.uid);
+  APP.sync.ready=true;
+  APP.sync.activeUid=user.uid;
+  APP.sync.unsubscribe=onSnapshot(APP.sync.docRef,snap=>{
+    const payload=snap.exists()?snap.data():null;
+    const remoteState=payload&&payload.state?sanitizeState(payload.state):null;
+    if(APP.sync.firstSnapshot){
+      APP.sync.firstSnapshot=false;
+      if(remoteState){
+        if(!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
+      } else {
+        queueCloudSave();
+      }
+      return;
+    }
+    if(remoteState&&!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
+  },err=>{
+    APP.sync.ready=false;
+    console.error('Firebase sync failed.',err);
+  });
+}
+
+async function signInWithGoogleAccount(){
   try{
-    const cred=await signInAnonymously(auth);
-    APP.sync.docRef=doc(db,CLOUD_COLLECTION,cred.user.uid);
-    APP.sync.ready=true;
-    onSnapshot(APP.sync.docRef,snap=>{
-      const payload=snap.exists()?snap.data():null;
-      const remoteState=payload&&payload.state?sanitizeState(payload.state):null;
-      if(APP.sync.firstSnapshot){
-        APP.sync.firstSnapshot=false;
-        if(remoteState){
-          if(!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
-        } else {
-          queueCloudSave();
-        }
+    const user=auth.currentUser;
+    if(user&&user.isAnonymous)await linkWithPopup(user,googleProvider);
+    else await signInWithPopup(auth,googleProvider);
+    toast('Google profile connected.');
+  }catch(err){
+    if(err.code==='auth/popup-closed-by-user')return;
+    if(err.code==='auth/cancelled-popup-request')return;
+    if(err.code==='auth/credential-already-in-use'){
+      try{
+        await signInWithPopup(auth,googleProvider);
+        toast('Signed in with Google.');
+        return;
+      }catch(innerErr){
+        if(innerErr.code!=='auth/popup-closed-by-user')console.error('Google sign-in failed.',innerErr);
         return;
       }
-      if(remoteState&&!statesEqual(remoteState,APP.state))syncFromCloud(remoteState);
-    },err=>{
-      APP.sync.ready=false;
-      console.error('Firebase sync failed.',err);
-    });
-  }catch(err){
-    console.error('Firebase sign-in failed.',err);
+    }
+    console.error('Google sign-in failed.',err);
+    toast('Google sign-in needs to be enabled in Firebase Auth.');
   }
+}
+
+function bindAuth(){
+  onAuthStateChanged(auth,user=>{
+    APP.auth.user=user;
+    renderAccountButton(user);
+    if(user)startCloudSync(user);
+    else{
+      stopCloudSync();
+      ensureAnonymousSession();
+    }
+  });
 }
 
 function initLeaves(){
@@ -728,11 +822,21 @@ document.addEventListener('DOMContentLoaded',()=>{
   renderStrip();
   renderDay();
   renderQuote(false);
+  renderAccountButton(null);
   requestAnimationFrame(()=>document.body.classList.add('ready'));
-  initFirebaseSync();
+  bindAuth();
+  ensureAnonymousSession();
 
   document.getElementById('btnTheme').addEventListener('click',()=>{
     SL.theme=SL.theme==='dark'?'light':'dark';applyTh(SL.theme);
+  });
+  document.getElementById('btnAccount').addEventListener('click',async()=>{
+    if(auth.currentUser&&!auth.currentUser.isAnonymous){
+      await signOut(auth);
+      toast('Signed out of Google.');
+      return;
+    }
+    await signInWithGoogleAccount();
   });
   document.getElementById('dsPrev').addEventListener('click',()=>{
     SL.sm--;if(SL.sm<0){SL.sm=11;SL.sy--;}renderStrip();
