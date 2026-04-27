@@ -459,60 +459,6 @@ body {
   border-left: 3px solid var(--accent3);
 }
 
-.mobile-date-picker {
-  display: none;
-  position: relative;
-}
-.mobile-date-trigger {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: var(--r2);
-  border: 1px solid var(--border2);
-  background: linear-gradient(135deg, rgba(74,124,89,0.12), rgba(201,145,58,0.08));
-  color: var(--text);
-  font-family: 'Playfair Display', serif;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-  box-shadow: var(--shadow);
-  display: block;
-}
-.mobile-date-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-
-@media(max-width: 680px) {
-  .calendar-card {
-    position: static;
-    padding: 12px;
-  }
-  .cal-header,
-  .cal-days-header,
-  .cal-grid,
-  .quote-ticker {
-    display: none;
-  }
-  .mobile-date-picker {
-    display: block;
-  }
-  .tasks-header {
-    padding: 16px 16px 12px;
-  }
-  .tasks-date {
-    font-size: 18px;
-  }
-  .task-add-area,
-  .progress-bar-wrap {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-}
-
 /* Theme toggle */
 .theme-toggle-wrap { display: flex; gap: 4px; align-items: center; }
 
@@ -588,10 +534,6 @@ body {
           <button class="cal-btn" id="calNext">›</button>
         </div>
       </div>
-      <label class="mobile-date-picker" for="mobileDateInput">
-        <span class="mobile-date-trigger" id="mobileDateTrigger"></span>
-        <input class="mobile-date-input" id="mobileDateInput" type="date" aria-label="Choose date" />
-      </label>
       <div class="cal-days-header">
         <div class="cal-day-label">Su</div>
         <div class="cal-day-label">Mo</div>
@@ -655,9 +597,6 @@ const QUOTES = [
 const BLOOM_EMOJIS = ['🌸', '🌺', '🌼', '🌻', '💐', '🌷', '🌹'];
 const WILTED_EMOJIS = ['🥀'];
 
-const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
 // State
 let state = {
   selectedDate: todayStr(),
@@ -686,17 +625,6 @@ function dateStr(y, m, d) {
 function isToday(ds) { return ds === todayStr(); }
 function isPast(ds) { return ds < todayStr(); }
 function isFuture(ds) { return ds > todayStr(); }
-function parseDate(ds) { return new Date(ds + 'T00:00:00'); }
-function formatMobileDate(ds) {
-  const d = parseDate(ds);
-  return `${DAY_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-}
-function syncMobileDateControl() {
-  const input = document.getElementById('mobileDateInput');
-  const trigger = document.getElementById('mobileDateTrigger');
-  if (input) input.value = state.selectedDate;
-  if (trigger) trigger.textContent = formatMobileDate(state.selectedDate);
-}
 
 function tasksForDate(ds) {
   const store = getStore();
@@ -736,7 +664,8 @@ function renderCalendar() {
   const today = todayStr();
   const store = getStore();
 
-  document.getElementById('calMonthTitle').textContent = `${MONTH_NAMES[calMonth]} ${calYear}`;
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('calMonthTitle').textContent = `${months[calMonth]} ${calYear}`;
 
   const grid = document.getElementById('calGrid');
   grid.innerHTML = '';
@@ -786,10 +715,7 @@ function renderCalendar() {
 }
 
 function selectDate(ds) {
-  const selected = parseDate(ds);
   state.selectedDate = ds;
-  state.calYear = selected.getFullYear();
-  state.calMonth = selected.getMonth();
   renderCalendar();
   renderTasks();
 }
@@ -799,20 +725,20 @@ function renderTasks() {
   const ds = state.selectedDate;
   const tasks = tasksForDate(ds);
   const today = todayStr();
-  const readOnly = future;
+  const readOnly = ds !== today;
   const past = isPast(ds);
   const future = isFuture(ds);
-  const d = parseDate(ds);
-
-  syncMobileDateControl();
 
   // Date title
+  const d = new Date(ds + 'T00:00:00');
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('tasksDateTitle').innerHTML =
-    `${DAY_NAMES[d.getDay()]}, ${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}
+    `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}
     <span class="tasks-date-badge ${isToday(ds) ? 'badge-today' : past ? 'badge-past' : 'badge-future'}">${isToday(ds) ? 'Today' : past ? 'Past' : 'Future'}</span>`;
   document.getElementById('tasksDateSub').textContent = readOnly
-    ? 'Read-only — future day'
-    : (past ? 'You can edit this past day' : 'Your garden for today');
+    ? (past ? 'Read-only — past day' : 'Read-only — future day')
+    : 'Your garden for today';
 
   // Input area
   const addArea = document.getElementById('taskAddArea');
@@ -831,7 +757,7 @@ function renderTasks() {
   list.innerHTML = '';
 
   if (tasks.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🌱</div><div class="empty-text">${readOnly ? 'Future days cannot be edited yet.' : past ? 'No tasks were saved for this day yet.' : 'No tasks yet.<br>Plant your first intention above!'}</div></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🌱</div><div class="empty-text">${readOnly ? 'No tasks were planted for this day.' : 'No tasks yet.<br>Plant your first intention above!'}</div></div>`;
   } else {
     tasks.forEach((task, i) => {
       const li = document.createElement('li');
@@ -1083,10 +1009,12 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCalendar();
   });
   document.getElementById('calToday').addEventListener('click', () => {
-    selectDate(todayStr());
-  });
-  document.getElementById('mobileDateInput').addEventListener('change', e => {
-    if (e.target.value) selectDate(e.target.value);
+    const now = new Date();
+    state.calYear = now.getFullYear();
+    state.calMonth = now.getMonth();
+    state.selectedDate = todayStr();
+    renderCalendar();
+    renderTasks();
   });
 
   document.getElementById('btnAdd').addEventListener('click', addTask);
