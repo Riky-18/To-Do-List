@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Bloom</title>
+<meta name="theme-color" content="#f4f1e8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Bloom">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -51,7 +59,8 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 /* topbar */
 .topbar{flex:0 0 auto;padding:14px 18px 10px;display:flex;align-items:center;justify-content:space-between;background:var(--card);border-bottom:1px solid var(--border);position:relative;z-index:10;box-shadow:var(--sh);}
 .tl{display:flex;align-items:center;gap:10px;}
-.app-icon{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--gold));display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 2px 8px rgba(74,124,89,.28);animation:iconFloat 4.8s ease-in-out infinite;}
+.app-icon{width:36px;height:36px;border-radius:50%;background:var(--card) url('./icons/logo-mark.png') center/cover no-repeat;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(74,124,89,.28);animation:iconFloat 4.8s ease-in-out infinite;overflow:hidden;border:1px solid rgba(255,255,255,.55);font-size:0;color:transparent;}
+.app-icon img{width:100%;height:100%;object-fit:cover;display:block;}
 .app-name{font-family:'Playfair Display',serif;font-size:22px;font-weight:600;color:var(--text);letter-spacing:-.4px;line-height:1;}
 .app-sub{font-size:10px;color:var(--text3);letter-spacing:.5px;text-transform:uppercase;}
 .tr{display:flex;gap:8px;}
@@ -503,6 +512,15 @@ async function ensureAnonymousSession(){
   }
 }
 
+async function registerServiceWorker(){
+  if(!('serviceWorker'in navigator))return;
+  try{
+    await navigator.serviceWorker.register('./service-worker.js');
+  }catch(err){
+    console.error('Service worker registration failed.',err);
+  }
+}
+
 function gs(){return APP.state.days}
 function ss(d){APP.state.days=d;saveState()}
 function tf(ds){return APP.state.days[ds]||[]}
@@ -850,6 +868,7 @@ function initLeaves(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
+  registerServiceWorker();
   applyTh(SL.theme);
   initLeaves();
   renderStrip();
