@@ -422,7 +422,7 @@ function clearLegacyLocalState(){
 const APP={
   state:defaultState(),
   sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null},
-  auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,lastButtonTriggerAt:0,busy:false,ready:false},
+  auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,busy:false,ready:false},
   refresh:{loading:false,tracking:false,startY:0,distance:0,armed:false}
 };
 
@@ -1027,33 +1027,6 @@ async function handleAccountButtonTap(){
   APP.auth.logoutTapTimer=setTimeout(clearLogoutTapState,1500);
 }
 
-function bindAccountButton(){
-  const btn=document.getElementById('btnAccount');
-  if(!btn)return;
-
-  const triggerAccountAction=event=>{
-    if(APP.auth.busy)return;
-    const now=Date.now();
-    if(now-APP.auth.lastButtonTriggerAt<220)return;
-    APP.auth.lastButtonTriggerAt=now;
-    if(event){
-      if(typeof event.preventDefault==='function')event.preventDefault();
-      if(typeof event.stopPropagation==='function')event.stopPropagation();
-    }
-    handleAccountButtonTap();
-  };
-
-  btn.addEventListener('pointerup',event=>{
-    if(event.pointerType==='mouse'&&event.button!==0)return;
-    triggerAccountAction(event);
-  });
-
-  btn.addEventListener('click',event=>{
-    if(event.detail!==0)return;
-    triggerAccountAction(event);
-  });
-}
-
 function initLeaves(){
   const c=document.getElementById('bgl');
   [{x:'4%',y:'8%',s:80,d:0},{x:'88%',y:'4%',s:60,d:2},{x:'78%',y:'78%',s:95,d:4},{x:'1%',y:'68%',s:70,d:1},{x:'92%',y:'48%',s:55,d:5}]
@@ -1144,13 +1117,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   requestAnimationFrame(()=>document.body.classList.add('ready'));
   bindPullToRefresh();
   bindLifecycleSync();
-  bindAccountButton();
   bindAuth();
   initAuthSession();
 
   document.getElementById('btnTheme').addEventListener('click',()=>{
     SL.theme=SL.theme==='dark'?'light':'dark';applyTh(SL.theme);
   });
+  document.getElementById('btnAccount').addEventListener('click',handleAccountButtonTap);
   document.getElementById('dsPrev').addEventListener('click',()=>{
     SL.sm--;if(SL.sm<0){SL.sm=11;SL.sy--;}renderStrip();
   });
