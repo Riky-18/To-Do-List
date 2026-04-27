@@ -530,8 +530,6 @@ async function initAuthSession(){
   try{
     await setPersistence(auth,browserLocalPersistence);
     const redirectResult=await getRedirectResult(auth);
-    if(redirectResult?.user)APP.auth.user=redirectResult.user;
-    else if(auth.currentUser)APP.auth.user=auth.currentUser;
     if(redirectResult?.user)toast('Tasks now sync with your Google account.');
   }catch(err){
     console.error('Auth initialization failed.',err);
@@ -539,8 +537,6 @@ async function initAuthSession(){
     APP.auth.ready=true;
     setAccountBusy(false);
     renderAccountButton(APP.auth.user);
-    renderStrip();
-    renderDay();
   }
 }
 
@@ -990,8 +986,6 @@ function bindAuth(){
       stopCloudSync();
       resetAccountState(SL.theme);
     }
-    renderStrip();
-    renderDay();
   });
 }
 
@@ -1106,7 +1100,6 @@ function bindLifecycleSync(){
 
 document.addEventListener('DOMContentLoaded',()=>{
   clearLegacyLocalState();
-  APP.auth.user=auth.currentUser;
   registerServiceWorker();
   applyTh(SL.theme);
   initLeaves();
