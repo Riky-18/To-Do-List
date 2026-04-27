@@ -68,10 +68,8 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 .tr #btnBouquet{order:1;}
 .tr #btnTheme{order:2;}
 .tr .userbtn{order:3;}
-.tbb{width:36px;height:36px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .2s;color:var(--text);touch-action:manipulation;}
+.tbb{width:36px;height:36px;border-radius:50%;border:1px solid var(--border2);background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .2s;color:var(--text);}
 .tbb:active{transform:scale(.9);background:var(--bg3);}
-.tbb:disabled{opacity:.65;cursor:default;}
-.tbb:disabled:active{transform:none;background:var(--bg2);}
 .userbtn{position:relative;overflow:hidden;padding:0;}
 .userbtn::after{content:'';position:absolute;right:3px;bottom:3px;width:7px;height:7px;border-radius:50%;background:var(--text3);border:1.5px solid var(--card);opacity:.75;transition:all .2s;}
 .userbtn.signed::after{background:var(--accent2);opacity:1;}
@@ -422,7 +420,7 @@ function clearLegacyLocalState(){
 const APP={
   state:defaultState(),
   sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null},
-  auth:{user:null,logoutTapCount:0,logoutTapTimer:null,lastTapAt:0,busy:false},
+  auth:{user:null,logoutTapCount:0,logoutTapTimer:null},
   refresh:{loading:false,tracking:false,startY:0,distance:0,armed:false}
 };
 
@@ -482,15 +480,8 @@ function isSignedIntoAccount(user){
 
 function clearLogoutTapState(){
   APP.auth.logoutTapCount=0;
-  APP.auth.lastTapAt=0;
   clearTimeout(APP.auth.logoutTapTimer);
   APP.auth.logoutTapTimer=null;
-}
-
-function setAccountBusy(busy){
-  APP.auth.busy=busy;
-  const btn=document.getElementById('btnAccount');
-  if(btn)btn.disabled=busy;
 }
 
 function renderAccountButton(user){
@@ -511,7 +502,6 @@ function renderAccountButton(user){
     img.removeAttribute('src');
     txt.style.display='flex';
   }
-  btn.disabled=APP.auth.busy;
 }
 
 async function registerServiceWorker(){
@@ -915,8 +905,6 @@ function startCloudSync(user){
 }
 
 async function signInWithGoogleAccount(){
-  if(APP.auth.busy)return;
-  setAccountBusy(true);
   try{
     await signInWithPopup(auth,googleProvider);
     toast('Tasks now sync with your Google account.');
@@ -935,15 +923,12 @@ async function signInWithGoogleAccount(){
     }
     console.error('Google sign-in failed.',err);
     toast('Google sign-in needs to be enabled in Firebase Auth.');
-  }finally{
-    setAccountBusy(false);
   }
 }
 
 function bindAuth(){
   onAuthStateChanged(auth,user=>{
     APP.auth.user=user;
-    setAccountBusy(false);
     clearLogoutTapState();
     renderAccountButton(user);
     if(user)startCloudSync(user);
@@ -955,35 +940,26 @@ function bindAuth(){
 }
 
 async function handleAccountButtonTap(){
-  if(APP.auth.busy)return;
-  const user=APP.auth.user;
+  const user=auth.currentUser;
   if(!isSignedIntoAccount(user)){
     await signInWithGoogleAccount();
     return;
   }
 
-  const now=Date.now();
-  if(now-APP.auth.lastTapAt>1500)APP.auth.logoutTapCount=0;
-  APP.auth.lastTapAt=now;
   APP.auth.logoutTapCount+=1;
   clearTimeout(APP.auth.logoutTapTimer);
 
   if(APP.auth.logoutTapCount>=3){
     clearLogoutTapState();
-    setAccountBusy(true);
-    try{
-      await flushCloudSave();
-      await signOut(auth);
-      toast('Signed out. Sign in again to load your synced tasks.');
-    }finally{
-      setAccountBusy(false);
-    }
+    await flushCloudSave();
+    await signOut(auth);
+    toast('Signed out. Sign in again to load your synced tasks.');
     return;
   }
 
   const left=3-APP.auth.logoutTapCount;
   toast(`Triple tap profile to sign out. ${left} more tap${left===1?'':'s'}.`);
-  APP.auth.logoutTapTimer=setTimeout(clearLogoutTapState,1500);
+  APP.auth.logoutTapTimer=setTimeout(clearLogoutTapState,900);
 }
 
 function initLeaves(){
