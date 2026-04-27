@@ -455,8 +455,13 @@ async function flushCloudSave(){
   await pushCloudState();
 }
 
-function saveState(remote=true){
-  if(remote)queueCloudSave();
+function saveState(remote=true,immediate=false){
+  if(!remote)return;
+  if(immediate){
+    pushCloudState();
+    return;
+  }
+  queueCloudSave();
 }
 
 function stopCloudSync(){
@@ -554,13 +559,13 @@ async function registerServiceWorker(){
 }
 
 function gs(){return APP.state.days}
-function ss(d){APP.state.days=d;saveState()}
+function ss(d){APP.state.days=d;saveState(true,true)}
 function tf(ds){return APP.state.days[ds]||[]}
-function stf(ds,t){APP.state.days[ds]=t;saveState()}
+function stf(ds,t){APP.state.days[ds]=t;saveState(true,true)}
 function gst(){return APP.state.streak}
-function sst(v){APP.state.streak=v;saveState()}
+function sst(v){APP.state.streak=v;saveState(true,true)}
 function gsd(){return APP.state.streakDate}
-function ssd(d){APP.state.streakDate=d;saveState()}
+function ssd(d){APP.state.streakDate=d;saveState(true,true)}
 
 function addRecurMo(text,y,m){
   const s=gs();
