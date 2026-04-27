@@ -116,16 +116,13 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 }
 
 /* body */
-.bscroll{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 100px;scrollbar-width:none;position:relative;touch-action:pan-y;}
+.bscroll{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 100px;scrollbar-width:none;position:relative;overscroll-behavior-y:contain;touch-action:pan-y;}
 .bscroll::-webkit-scrollbar{display:none;}
-.pull-refresh{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 110px);transform:translateX(-50%);z-index:26;display:flex;justify-content:center;pointer-events:none;}
-.pull-pill{min-width:164px;max-width:calc(100vw - 36px);padding:9px 14px;border-radius:999px;background:rgba(253,250,243,.96);backdrop-filter:blur(8px);border:1px solid var(--border2);box-shadow:var(--sh);font-size:12px;font-weight:500;color:var(--text2);text-align:center;transform:translateY(-22px) scale(.96);opacity:0;transition:transform .18s ease,opacity .18s ease,background .18s ease,color .18s ease,border-color .18s ease;}
+.pull-refresh{position:sticky;top:0;z-index:6;height:0;display:flex;justify-content:center;pointer-events:none;overflow:visible;}
+.pull-pill{min-width:164px;padding:9px 14px;border-radius:999px;background:rgba(253,250,243,.94);border:1px solid var(--border2);box-shadow:var(--sh);font-size:12px;font-weight:500;color:var(--text2);text-align:center;transform:translateY(-62px) scale(.92);opacity:0;transition:transform .22s ease,opacity .22s ease,background .22s ease,color .22s ease,border-color .22s ease;}
 .pull-pill.show{opacity:1;}
 .pull-pill.ready,.pull-pill.loading{background:var(--accent);border-color:var(--accent);color:#fff;}
-.inner{position:relative;z-index:1;}
-@media (min-width: 769px){
-  .pull-refresh{display:none;}
-}
+.inner{position:relative;z-index:1;transition:transform .22s ease;}
 
 /* stats */
 .srow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
@@ -790,6 +787,7 @@ function statesEqual(a,b){
 
 function getPullUi(){
   return{
+    inner:document.getElementById('inner'),
     pill:document.getElementById('pullRefreshPill')
   };
 }
@@ -798,46 +796,49 @@ function resetPullRefreshIndicator(){
   APP.refresh.tracking=false;
   APP.refresh.distance=0;
   APP.refresh.armed=false;
-  const{pill}=getPullUi();
+  const{inner,pill}=getPullUi();
+  if(inner)inner.style.transform='translateY(0)';
   if(pill){
     pill.textContent='Pull to refresh';
     pill.classList.remove('show','ready','loading');
-    pill.style.transform='translateY(-22px) scale(.96)';
+    pill.style.transform='translateY(-62px) scale(.92)';
     pill.style.opacity='0';
   }
 }
 
 function updatePullRefreshIndicator(distance){
-  const{pill}=getPullUi();
-  const eased=Math.min(92,distance);
+  const{inner,pill}=getPullUi();
+  const eased=Math.min(118,distance);
+  const shift=Math.min(42,Math.round(eased*.42));
   APP.refresh.distance=eased;
-  APP.refresh.armed=eased>=58;
+  APP.refresh.armed=eased>=72;
+  if(inner)inner.style.transform=`translateY(${shift}px)`;
   if(pill){
-    const pillY=Math.min(10,-22+eased*.45);
+    const pillY=Math.min(22,-62+eased);
     pill.textContent=APP.refresh.armed?'Release to refresh':'Pull to refresh';
     pill.classList.add('show');
     pill.classList.toggle('ready',APP.refresh.armed);
     pill.classList.remove('loading');
-    pill.style.transform=`translateY(${pillY}px) scale(${0.96+Math.min(eased,48)/700})`;
-    pill.style.opacity=String(Math.min(1,Math.max(.14,eased/42)));
+    pill.style.transform=`translateY(${pillY}px) scale(${0.92+Math.min(eased,60)/520})`;
+    pill.style.opacity=String(Math.min(1,Math.max(.14,eased/54)));
   }
 }
 
 async function refreshCloudState(source='manual'){
   if(APP.refresh.loading)return;
-  const manual=source==='manual';
   if(!APP.sync.docRef){
-    if(manual)toast('Sign in with Google to refresh shared tasks.');
+    if(source==='manual')toast('Sign in with Google to refresh shared tasks.');
     resetPullRefreshIndicator();
     return;
   }
   APP.refresh.loading=true;
-  const{pill}=getPullUi();
-  if(manual&&pill){
+  const{inner,pill}=getPullUi();
+  if(inner)inner.style.transform='translateY(18px)';
+  if(pill){
     pill.textContent='Refreshing...';
     pill.classList.add('show','loading');
     pill.classList.remove('ready');
-    pill.style.transform='translateY(6px) scale(1)';
+    pill.style.transform='translateY(12px) scale(1)';
     pill.style.opacity='1';
   }
   try{
@@ -847,20 +848,19 @@ async function refreshCloudState(source='manual'){
     if(remoteState){
       if(!statesEqual(remoteState,APP.state)){
         syncFromCloud(remoteState);
-        if(manual)toast('Latest tasks loaded.');
-      } else if(manual){
+        if(source==='manual')toast('Latest tasks loaded.');
+      } else if(source==='manual'){
         toast('Your task list is already up to date.');
       }
-    } else if(manual){
+    } else if(source==='manual'){
       toast('No synced tasks found for this account yet.');
     }
   }catch(err){
     console.error('Cloud refresh failed.',err);
-    if(manual)toast(navigator.onLine?'Unable to refresh right now.':'You are offline right now.');
+    if(source==='manual')toast(navigator.onLine?'Unable to refresh right now.':'You are offline right now.');
   }finally{
     APP.refresh.loading=false;
-    if(manual)setTimeout(resetPullRefreshIndicator,140);
-    else resetPullRefreshIndicator();
+    setTimeout(resetPullRefreshIndicator,140);
   }
 }
 
@@ -976,18 +976,10 @@ function initLeaves(){
 function bindPullToRefresh(){
   const scroller=document.getElementById('bscroll');
   if(!scroller)return;
-  const isMobileGesture=()=>window.matchMedia('(pointer: coarse)').matches||window.innerWidth<=768;
 
   scroller.addEventListener('touchstart',event=>{
-    if(event.touches.length!==1||APP.refresh.loading||!isMobileGesture())return;
+    if(event.touches.length!==1||APP.refresh.loading)return;
     if(scroller.scrollTop>0){
-      APP.refresh.tracking=false;
-      return;
-    }
-    if(event.target.closest('input,textarea,select,button'))return;
-    const bounds=scroller.getBoundingClientRect();
-    const offsetFromTop=event.touches[0].clientY-bounds.top;
-    if(offsetFromTop>84){
       APP.refresh.tracking=false;
       return;
     }
@@ -1009,7 +1001,7 @@ function bindPullToRefresh(){
       return;
     }
     updatePullRefreshIndicator(delta*.55);
-    if(delta>18)event.preventDefault();
+    if(delta>8)event.preventDefault();
   },{passive:false});
 
   const finishPull=()=>{
