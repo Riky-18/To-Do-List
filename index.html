@@ -341,7 +341,7 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getAnalytics, isSupported as analyticsSupported } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-analytics.js";
-import { getAuth, GoogleAuthProvider, linkWithPopup, onAuthStateChanged, signInAnonymously, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 import { getFirestore, doc, getDocFromServer, onSnapshot, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -361,11 +361,6 @@ const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({prompt:'select_account'});
 analyticsSupported().then(supported=>{if(supported)getAnalytics(app);}).catch(()=>{});
 
-const STATE_KEY='blm3-state';
-const LEGACY_DAY_KEY='blm3';
-const LEGACY_STREAK_KEY='blm3-s';
-const LEGACY_STREAK_DAY_KEY='blm3-sd';
-const LEGACY_THEME_KEY='blm3-th';
 const CLOUD_COLLECTION='bloomUsers';
 const QQ=['Every completed task is a flower that blooms.','Small steps every day grow into great gardens.','Nurture your goals like seeds — with patience.','The secret of getting ahead is getting started.','A day without growth is a day without bloom.','Let your tasks root deeply, your peace grow tall.','You are doing better than yesterday\'s flower knew.','Even the tallest tree started as a single seed.','One task at a time. One petal at a time.','Growth is quiet. Keep going.'];
 const BL=['🌸','🌺','🌼','🌻','🌷','🌹','💮'];
@@ -381,10 +376,6 @@ function isPast(ds){return ds<tdStr();}
 function isFuture(ds){return ds>tdStr();}
 function isToday(ds){return ds===tdStr();}
 function replayClass(el,cn){if(!el)return;el.classList.remove(cn);void el.offsetWidth;el.classList.add(cn);}
-
-function loadLegacyDays(){
-  try{return JSON.parse(localStorage.getItem(LEGACY_DAY_KEY)||'{}')}catch{return{}}
-}
 
 function sanitizeTask(task,index){
   const text=typeof task?.text==='string'?task.text.trim().slice(0,120):'';
@@ -403,48 +394,32 @@ function sanitizeDays(days){
   return clean;
 }
 
-function loadLegacyState(){
-  return{
-    days:sanitizeDays(loadLegacyDays()),
-    streak:parseInt(localStorage.getItem(LEGACY_STREAK_KEY)||'0',10)||0,
-    streakDate:localStorage.getItem(LEGACY_STREAK_DAY_KEY)||'',
-    theme:localStorage.getItem(LEGACY_THEME_KEY)||'light'
-  };
+function defaultState(theme='light'){
+  return{days:{},streak:0,streakDate:'',theme:theme==='dark'?'dark':'light'};
 }
 
 function sanitizeState(raw){
-  const legacy=loadLegacyState();
   const src=raw&&typeof raw==='object'?raw:{};
   return{
-    days:sanitizeDays(src.days??legacy.days),
-    streak:Number.isFinite(Number(src.streak))?Math.max(0,parseInt(src.streak,10)||0):legacy.streak,
-    streakDate:typeof src.streakDate==='string'?src.streakDate:legacy.streakDate,
-    theme:src.theme==='dark'||src.theme==='light'?src.theme:legacy.theme
+    days:sanitizeDays(src.days),
+    streak:Number.isFinite(Number(src.streak))?Math.max(0,parseInt(src.streak,10)||0):0,
+    streakDate:typeof src.streakDate==='string'?src.streakDate:'',
+    theme:src.theme==='dark'||src.theme==='light'?src.theme:'light'
   };
 }
 
-function loadState(){
+function clearLegacyLocalState(){
   try{
-    const parsed=JSON.parse(localStorage.getItem(STATE_KEY)||'null');
-    if(parsed)return sanitizeState(parsed);
+    ['blm3-state','blm3','blm3-s','blm3-sd','blm3-th'].forEach(key=>localStorage.removeItem(key));
   }catch{}
-  return loadLegacyState();
 }
 
 const APP={
-  state:loadState(),
+  state:defaultState(),
   sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null},
   auth:{user:null,logoutTapCount:0,logoutTapTimer:null},
   refresh:{loading:false,tracking:false,startY:0,distance:0,armed:false}
 };
-
-function persistLocalState(){
-  localStorage.setItem(STATE_KEY,JSON.stringify(APP.state));
-  localStorage.setItem(LEGACY_DAY_KEY,JSON.stringify(APP.state.days));
-  localStorage.setItem(LEGACY_STREAK_KEY,String(APP.state.streak));
-  localStorage.setItem(LEGACY_STREAK_DAY_KEY,APP.state.streakDate);
-  localStorage.setItem(LEGACY_THEME_KEY,APP.state.theme);
-}
 
 function queueCloudSave(){
   if(!APP.sync.ready||APP.sync.applying||!APP.sync.docRef)return;
@@ -476,7 +451,6 @@ async function flushCloudSave(){
 }
 
 function saveState(remote=true){
-  persistLocalState();
   if(remote)queueCloudSave();
 }
 
@@ -498,7 +472,7 @@ function profileLabel(user){
 }
 
 function isSignedIntoAccount(user){
-  return !!user&&!user.isAnonymous;
+  return !!user;
 }
 
 function clearLogoutTapState(){
@@ -514,7 +488,7 @@ function renderAccountButton(user){
   const signed=isSignedIntoAccount(user);
   const name=signed?(user.displayName||user.email||'Google account'):'Google sign in';
   btn.classList.toggle('signed',signed);
-  btn.title=signed?`Signed in as ${name}. Triple tap to sign out.`:'Sign in with Google';
+  btn.title=signed?`Signed in as ${name}. Triple tap to sign out.`:'Sign in with Google to sync your tasks';
   txt.textContent=profileLabel(user);
   if(signed&&user.photoURL){
     img.src=user.photoURL;
@@ -524,15 +498,6 @@ function renderAccountButton(user){
     img.hidden=true;
     img.removeAttribute('src');
     txt.style.display='flex';
-  }
-}
-
-async function ensureAnonymousSession(){
-  if(auth.currentUser)return;
-  try{
-    await signInAnonymously(auth);
-  }catch(err){
-    console.error('Anonymous sign-in failed.',err);
   }
 }
 
@@ -592,7 +557,6 @@ function applyTh(t,persist=true){
   document.getElementById('btnTheme').textContent=t==='dark'?'☀️':'🌙';
   APP.state.theme=t;
   if(persist)saveState();
-  else persistLocalState();
 }
 
 function renderStrip(){
@@ -635,7 +599,8 @@ function renderDay(){
   const tasks=tf(ds);
   const future=isFuture(ds);
   const past=isPast(ds);
-  const editable=!future;
+  const signedIn=isSignedIntoAccount(APP.auth.user);
+  const editable=signedIn&&!future;
   const d=parseD(ds);
 
   document.getElementById('dtitle').textContent=`${DN[d.getDay()]}, ${MO[d.getMonth()]} ${d.getDate()}`;
@@ -645,7 +610,9 @@ function renderDay(){
   badge.className='dbadge '+(isToday(ds)?'b-today':past?'b-past':'b-future');
 
   const addArea=document.getElementById('addArea');
-  if(future){
+  if(!signedIn){
+    addArea.innerHTML=`<div class="locked"><div class="locked-ico">☁</div>Sign in with Google to load your account tasks.<br>Your list will sync across all devices on the same account.</div>`;
+  } else if(future){
     addArea.innerHTML=`<div class="locked"><div class="locked-ico">🔒</div>Future dates are read-only.<br>Add tasks to today or past days only.</div>`;
   } else {
     addArea.innerHTML=`
@@ -676,6 +643,9 @@ function renderDay(){
   const list=document.getElementById('tlist');
   list.innerHTML='';
   if(!tasks.length){
+    if(!signedIn){
+      list.innerHTML=`<div class="empty"><div class="empty-ico">Cloud</div><div class="empty-txt">Sign in to view and manage your cloud-synced tasks.</div></div>`;
+    } else
     list.innerHTML=`<div class="empty"><div class="empty-ico">${future?'🔮':past?'📜':'🌱'}</div><div class="empty-txt">${future?'No tasks planned.<br>Come back to today to add tasks.':past?'No tasks were recorded for this day.':'No tasks yet.<br>Plant your first intention above!'}</div></div>`;
   } else {
     tasks.forEach(task=>{
@@ -713,6 +683,7 @@ function renderDay(){
 }
 
 function addTask(){
+  if(!isSignedIntoAccount(APP.auth.user)){toast('Sign in with Google to save tasks to your account.');return;}
   const inp=document.getElementById('tinput');
   const text=inp.value.trim();
   if(!text)return;
@@ -733,6 +704,7 @@ function addTask(){
 }
 
 function toggleTask(ds,id,li,fb){
+  if(!isSignedIntoAccount(APP.auth.user)){toast('Sign in with Google to update tasks.');return;}
   const tasks=tf(ds);const task=tasks.find(t=>t.id===id);
   if(!task)return;
   task.done=!task.done;stf(ds,tasks);
@@ -745,6 +717,7 @@ function toggleTask(ds,id,li,fb){
 }
 
 function delTask(ds,id,li){
+  if(!isSignedIntoAccount(APP.auth.user)){toast('Sign in with Google to delete tasks.');return;}
   li.style.transition='all .22s';li.style.opacity='0';li.style.transform='translateX(16px) scale(.95)';
   setTimeout(()=>{stf(ds,tf(ds).filter(t=>t.id!==id));renderStrip();renderDay();},200);
 }
@@ -895,11 +868,16 @@ function syncFromCloud(state){
   APP.sync.applying=true;
   APP.state=sanitizeState(state);
   SL.theme=APP.state.theme;
-  persistLocalState();
   applyTh(SL.theme,false);
   renderStrip();
   renderDay();
   APP.sync.applying=false;
+}
+
+function resetAccountState(theme=SL.theme){
+  APP.state=defaultState(theme);
+  renderStrip();
+  renderDay();
 }
 
 function startCloudSync(user){
@@ -928,9 +906,7 @@ function startCloudSync(user){
 
 async function signInWithGoogleAccount(){
   try{
-    const user=auth.currentUser;
-    if(user&&user.isAnonymous)await linkWithPopup(user,googleProvider);
-    else await signInWithPopup(auth,googleProvider);
+    await signInWithPopup(auth,googleProvider);
     toast('Tasks now sync with your Google account.');
   }catch(err){
     if(err.code==='auth/popup-closed-by-user')return;
@@ -958,7 +934,7 @@ function bindAuth(){
     if(user)startCloudSync(user);
     else{
       stopCloudSync();
-      ensureAnonymousSession();
+      resetAccountState(SL.theme);
     }
   });
 }
@@ -977,7 +953,7 @@ async function handleAccountButtonTap(){
     clearLogoutTapState();
     await flushCloudSave();
     await signOut(auth);
-    toast('Signed out. Local sync is active until you sign in again.');
+    toast('Signed out. Sign in again to load your synced tasks.');
     return;
   }
 
@@ -1056,6 +1032,7 @@ function bindLifecycleSync(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
+  clearLegacyLocalState();
   registerServiceWorker();
   applyTh(SL.theme);
   initLeaves();
@@ -1067,7 +1044,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   bindPullToRefresh();
   bindLifecycleSync();
   bindAuth();
-  ensureAnonymousSession();
 
   document.getElementById('btnTheme').addEventListener('click',()=>{
     SL.theme=SL.theme==='dark'?'light':'dark';applyTh(SL.theme);
