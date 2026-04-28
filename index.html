@@ -380,6 +380,8 @@ const LEGACY_STREAK_KEY='blm3-s';
 const LEGACY_STREAK_DAY_KEY='blm3-sd';
 const LEGACY_THEME_KEY='blm3-th';
 const CLOUD_COLLECTION='bloomUsers';
+const LOGOUT_TAP_RESET_MS=1800;
+const SIGN_OUT_SAVE_TIMEOUT_MS=1200;
 const QQ=['Every completed task is a flower that blooms.','Small steps every day grow into great gardens.','Nurture your goals like seeds — with patience.','The secret of getting ahead is getting started.','A day without growth is a day without bloom.','Let your tasks root deeply, your peace grow tall.','You are doing better than yesterday\'s flower knew.','Even the tallest tree started as a single seed.','One task at a time. One petal at a time.','Growth is quiet. Keep going.'];
 const BL=['🌸','🌺','🌼','🌻','🌷','🌹','💮'];
 const MO=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -394,6 +396,7 @@ function isPast(ds){return ds<tdStr();}
 function isFuture(ds){return ds>tdStr();}
 function isToday(ds){return ds===tdStr();}
 function replayClass(el,cn){if(!el)return;el.classList.remove(cn);void el.offsetWidth;el.classList.add(cn);}
+function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 
 function loadLegacyDays(){
   try{return JSON.parse(localStorage.getItem(LEGACY_DAY_KEY)||'{}')}catch{return{}}
@@ -447,7 +450,7 @@ function loadState(){
 const APP={
   state:loadState(),
   sync:{ready:false,applying:false,firstSnapshot:true,docRef:null,timer:null,unsubscribe:null,activeUid:'',pushPromise:null},
-  auth:{user:null,logoutTapCount:0,logoutTapTimer:null},
+  auth:{user:null,logoutTapCount:0,logoutTapTimer:null,logoutInFlight:false},
   refresh:{loading:false,tracking:false,startX:0,startY:0,distance:0,armed:false}
 };
 
@@ -488,6 +491,13 @@ async function flushCloudSave(){
   await pushCloudState();
 }
 
+async function flushCloudSaveBeforeSignOut(){
+  if(!APP.sync.ready||!APP.sync.docRef)return;
+  try{
+    await Promise.race([flushCloudSave(),wait(SIGN_OUT_SAVE_TIMEOUT_MS)]);
+  }catch{}
+}
+
 function saveState(remote=true){
   persistLocalState();
   if(remote)queueCloudSave();
@@ -526,8 +536,15 @@ function renderAccountButton(user){
   const txt=document.getElementById('uinitial');
   const signed=isSignedIntoAccount(user);
   const name=signed?(user.displayName||user.email||'Google account'):'Google sign in';
+  const busy=APP.auth.logoutInFlight;
   btn.classList.toggle('signed',signed);
-  btn.title=signed?`Signed in as ${name}. Triple tap to sign out.`:'Sign in with Google';
+  btn.title=busy
+    ? 'Signing out...'
+    : signed
+      ? `Signed in as ${name}. Triple tap to sign out.`
+      : 'Sign in with Google';
+  btn.disabled=busy;
+  btn.setAttribute('aria-busy',busy?'true':'false');
   txt.textContent=profileLabel(user);
   if(signed&&user.photoURL){
     img.src=user.photoURL;
@@ -1099,6 +1116,7 @@ function bindAuth(){
 }
 
 async function handleAccountButtonTap(){
+  if(APP.auth.logoutInFlight)return;
   const user=auth.currentUser;
   if(!isSignedIntoAccount(user)){
     await signInWithGoogleAccount();
@@ -1110,15 +1128,26 @@ async function handleAccountButtonTap(){
 
   if(APP.auth.logoutTapCount>=3){
     clearLogoutTapState();
-    await flushCloudSave();
-    await signOut(auth);
-    toast('Signed out. Local sync is active until you sign in again.');
+    APP.auth.logoutInFlight=true;
+    renderAccountButton(user);
+    toast('Signing out...');
+    try{
+      await flushCloudSaveBeforeSignOut();
+      await signOut(auth);
+      toast('Signed out. Local sync is active until you sign in again.');
+    }catch(err){
+      console.error('Sign-out failed.',err);
+      toast('Could not sign out right now. Please try again.');
+    }finally{
+      APP.auth.logoutInFlight=false;
+      renderAccountButton(auth.currentUser);
+    }
     return;
   }
 
   const left=3-APP.auth.logoutTapCount;
   toast(`Triple tap profile to sign out. ${left} more tap${left===1?'':'s'}.`);
-  APP.auth.logoutTapTimer=setTimeout(clearLogoutTapState,900);
+  APP.auth.logoutTapTimer=setTimeout(clearLogoutTapState,LOGOUT_TAP_RESET_MS);
 }
 
 function initLeaves(){
