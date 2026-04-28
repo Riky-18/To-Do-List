@@ -161,10 +161,23 @@ body.ready .bnav{animation:riseIn .7s .18s var(--spring) both;}
 .tinput::placeholder{color:var(--text3);}
 .btnadd{width:42px;height:42px;min-width:42px;border-radius:var(--r3);background:var(--accent);border:none;color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(74,124,89,.28);transition:all .2s var(--spring);line-height:1;animation:buttonBreath 3.6s ease-in-out infinite;}
 .btnadd:active{transform:scale(.88);}
-.rrow{display:flex;align-items:center;gap:8px;margin-top:10px;}
+.rrow{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:10px;}
 .rlbl{font-size:12px;color:var(--text3);}
-.rsel{flex:1;padding:7px 10px;border-radius:var(--r3);background:var(--bg2);border:1px solid var(--border2);color:var(--text2);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;}
-.rsel:focus{border-color:var(--accent);}
+.rgroup{display:flex;flex-wrap:wrap;gap:8px;}
+.rchip{
+  min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid var(--border2);
+  background:var(--bg2);color:var(--text2);font-family:'DM Sans',sans-serif;font-size:12px;
+  cursor:pointer;transition:all .2s var(--spring);
+}
+.rchip:active{transform:scale(.96);}
+.rchip.sel{
+  background:rgba(74,124,89,.14);border-color:var(--accent2);color:var(--accent);
+  box-shadow:0 0 0 3px rgba(74,124,89,.08);
+}
+.rchip.day{min-width:42px;padding-inline:0;text-align:center;}
+.rchip.preset{background:rgba(201,144,58,.1);}
+.rchip.preset.sel{background:rgba(201,144,58,.18);border-color:rgba(201,144,58,.45);color:var(--gold);}
+.rhint{font-size:11px;color:var(--text3);line-height:1.5;}
 
 /* locked */
 .locked{background:var(--card2);border:1px solid var(--border);border-radius:var(--r);padding:18px 16px;text-align:center;margin-bottom:12px;font-size:13px;color:var(--text3);}
@@ -580,6 +593,111 @@ function addRecurWeekday(text,y,m,weekday){
   ss(s);
 }
 
+function addRecurWeekdays(text,y,m,weekdays){
+  const uniqueDays=[...new Set(weekdays)].filter(day=>day>=0&&day<=6);
+  if(!uniqueDays.length)return;
+  const weekdaySet=new Set(uniqueDays);
+  const s=gs();
+  const days=new Date(y,m+1,0).getDate();
+  for(let d=1;d<=days;d++){
+    const date=new Date(y,m,d);
+    const weekday=date.getDay();
+    if(!weekdaySet.has(weekday))continue;
+    const ds=toDs(y,m,d);
+    if(!s[ds])s[ds]=[];
+    if(!s[ds].find(t=>t.text===text))
+      s[ds].push({id:Date.now()+d+weekday*100,text,done:false,rec:true});
+  }
+  ss(s);
+}
+
+function initRepeatPicker(){
+  const picker=document.getElementById('repeatPicker');
+  if(!picker)return;
+
+  const setMode=mode=>{
+    const modeButtons=[...picker.querySelectorAll('[data-repeat-mode]')];
+    modeButtons.forEach(btn=>btn.classList.toggle('sel',btn.dataset.repeatMode===mode));
+    if(mode==='none'||mode==='month'){
+      picker.querySelectorAll('[data-repeat-day]').forEach(btn=>btn.classList.remove('sel'));
+    }
+    const preset=picker.querySelector('[data-repeat-preset="mon-sat"]');
+    if(preset)preset.classList.remove('sel');
+    const hint=document.getElementById('repeatHint');
+    if(!hint)return;
+    hint.textContent=mode==='month'
+      ? 'This task will be added to every date in the current month.'
+      : mode==='none'
+        ? 'This task will stay only on the selected day.'
+        : 'Pick one or more weekdays to repeat across this month.';
+  };
+
+  const syncDayState=()=>{
+    const selectedDays=[...picker.querySelectorAll('[data-repeat-day].sel')].map(btn=>Number(btn.dataset.repeatDay));
+    const preset=picker.querySelector('[data-repeat-preset="mon-sat"]');
+    const isMonSat=selectedDays.length===6&&[1,2,3,4,5,6].every(day=>selectedDays.includes(day));
+    if(preset)preset.classList.toggle('sel',isMonSat);
+    const hint=document.getElementById('repeatHint');
+    if(!hint)return;
+    if(selectedDays.length){
+      const labels=selectedDays
+        .sort((a,b)=>a-b)
+        .map(day=>DN[day].slice(0,3))
+        .join(', ');
+      hint.textContent=`This task will repeat on ${labels} this month.`;
+      return;
+    }
+    const activeMode=picker.querySelector('[data-repeat-mode].sel')?.dataset.repeatMode||'none';
+    hint.textContent=activeMode==='month'
+      ? 'This task will be added to every date in the current month.'
+      : 'This task will stay only on the selected day.';
+  };
+
+  picker.querySelectorAll('[data-repeat-mode]').forEach(btn=>{
+    btn.addEventListener('click',()=>setMode(btn.dataset.repeatMode));
+  });
+
+  picker.querySelectorAll('[data-repeat-day]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      picker.querySelectorAll('[data-repeat-mode]').forEach(modeBtn=>modeBtn.classList.remove('sel'));
+      btn.classList.toggle('sel');
+      syncDayState();
+      if(!picker.querySelector('[data-repeat-day].sel')){
+        setMode('none');
+      }
+    });
+  });
+
+  const monSat=picker.querySelector('[data-repeat-preset="mon-sat"]');
+  if(monSat){
+    monSat.addEventListener('click',()=>{
+      const dayButtons=[...picker.querySelectorAll('[data-repeat-day]')];
+      const nextState=!monSat.classList.contains('sel');
+      picker.querySelectorAll('[data-repeat-mode]').forEach(modeBtn=>modeBtn.classList.remove('sel'));
+      dayButtons.forEach(btn=>{
+        const day=Number(btn.dataset.repeatDay);
+        btn.classList.toggle('sel',nextState&&day>=1&&day<=6);
+      });
+      syncDayState();
+      if(!nextState)setMode('none');
+    });
+  }
+
+  setMode('none');
+}
+
+function getRepeatSelection(){
+  const picker=document.getElementById('repeatPicker');
+  if(!picker)return{mode:'none',days:[]};
+  const activeMode=picker.querySelector('[data-repeat-mode].sel')?.dataset.repeatMode||'custom';
+  const days=[...picker.querySelectorAll('[data-repeat-day].sel')]
+    .map(btn=>Number(btn.dataset.repeatDay))
+    .sort((a,b)=>a-b);
+  if(activeMode==='month')return{mode:'month',days:[]};
+  if(days.length)return{mode:'days',days};
+  return{mode:'none',days:[]};
+}
+
 const now=new Date();
 let SL={
   sel:tdStr(),
@@ -656,21 +774,28 @@ function renderDay(){
         </div>
         <div class="rrow">
           <span class="rlbl">Repeat:</span>
-          <select class="rsel" id="rsel">
-            <option value="none">This day only</option>
-            <option value="month">All of this month</option>
-            <option value="dow-0">All Sundays</option>
-            <option value="dow-1">All Mondays</option>
-            <option value="dow-2">All Tuesdays</option>
-            <option value="dow-3">All Wednesdays</option>
-            <option value="dow-4">All Thursdays</option>
-            <option value="dow-5">All Fridays</option>
-            <option value="dow-6">All Saturdays</option>
-          </select>
+          <div id="repeatPicker">
+            <div class="rgroup">
+              <button class="rchip sel" type="button" data-repeat-mode="none">This day only</button>
+              <button class="rchip" type="button" data-repeat-mode="month">All of this month</button>
+              <button class="rchip preset" type="button" data-repeat-preset="mon-sat">Mon-Sat</button>
+            </div>
+            <div class="rgroup">
+              <button class="rchip day" type="button" data-repeat-day="0">Sun</button>
+              <button class="rchip day" type="button" data-repeat-day="1">Mon</button>
+              <button class="rchip day" type="button" data-repeat-day="2">Tue</button>
+              <button class="rchip day" type="button" data-repeat-day="3">Wed</button>
+              <button class="rchip day" type="button" data-repeat-day="4">Thu</button>
+              <button class="rchip day" type="button" data-repeat-day="5">Fri</button>
+              <button class="rchip day" type="button" data-repeat-day="6">Sat</button>
+            </div>
+            <div class="rhint" id="repeatHint">This task will stay only on the selected day.</div>
+          </div>
         </div>
       </div>`;
     document.getElementById('btnadd').addEventListener('click',addTask);
     document.getElementById('tinput').addEventListener('keydown',e=>{if(e.key==='Enter')addTask();});
+    initRepeatPicker();
   }
 
   const list=document.getElementById('tlist');
@@ -716,16 +841,16 @@ function addTask(){
   const inp=document.getElementById('tinput');
   const text=inp.value.trim();
   if(!text)return;
-  const rec=document.getElementById('rsel').value;
+  const rec=getRepeatSelection();
   const ds=SL.sel;
   const d=parseD(ds);
-  if(rec==='month'){
+  if(rec.mode==='month'){
     addRecurMo(text,d.getFullYear(),d.getMonth());
     toast('Task added to all days this month.');
-  } else if(rec.startsWith('dow-')){
-    const weekday=Number(rec.split('-')[1]);
-    addRecurWeekday(text,d.getFullYear(),d.getMonth(),weekday);
-    toast(`${DN[weekday]} tasks added across this month.`);
+  } else if(rec.mode==='days'){
+    addRecurWeekdays(text,d.getFullYear(),d.getMonth(),rec.days);
+    const names=rec.days.map(day=>DN[day].slice(0,3)).join(', ');
+    toast(`Task added for ${names} this month.`);
   } else {
     const tasks=tf(ds);tasks.push({id:Date.now(),text,done:false,rec:false});stf(ds,tasks);
   }
